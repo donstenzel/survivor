@@ -64,8 +64,8 @@ M! ←^ $"map _ _"⊓repr($"⊓{_}" /$"_|_") ⍚°$"_ → _"
     ‼(⍥°□₁=₁⊸⧻|⍥¤≍[]⊸△)
   )
 
-  # data ? components ecs
-  FilterD ← GetD◡Filter
+  # ids data ? components ecs
+  FilterD ← ⟜GetD◡Filter
 
   # TODO: accept tables of data, entities & components
   # table shape and entities x components must match

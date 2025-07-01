@@ -21,6 +21,8 @@ BComp‼ ←^ (
   $$ ~_ {_}
 )
 
+Norm ← ⨬÷◌⊸=₀⊸⍜°√/+
+
 # TODO: make components use struct of arrays instead of array of structs
 
 ECS
@@ -31,7 +33,7 @@ BComp‼(Sprite|Texture Size)
 Comp‼(Path|Path)
 ┌─╴Paths
   |Point [x y]
-  |Player
+  |Player []
   |Enemy [i]
 └─╴
 Comp‼(Defense|Magical Physical)
@@ -62,21 +64,6 @@ Comp‼(ProjectileTag|Ω)
 # ecs ? ecs
 Movement ← ECS!(
   SetD⊓/◇+⊙"Position"⊸⤚GetD◡Filter{"Position" "Velocity"}
-)
-
-Repulsion ← ECS!(
-  ρ ← 0.2 # repulsion strength
-  CPos ← +⊓÷₂◇+◇Collision!⊃Size Offset⊃⊏₀⊏₂
-  Rect ← ⊙◇+◇Collision!⊃Size Offset⊃⊏₀⊏₂
-  Apply ← (
-    ⊃(∩⊏₁|×ρ÷⊸⍜°√/+◇-∩CPos|∩◇∘∩⊣)
-    SetD ⊙⊙"Velocity" ∩⊟ ◇⊓⌟-+
-  )
-
-  ⊸⤚GetD◡Filter{"Collision" "Velocity" "Position"}
-  ⊛◇⍜÷₅₀⌊ ⊃⊏₂⍉ ▽≡◇Collision~Solid⊸⊢ ⊂≡◇≡□
-  /◇⊂⊕(□▽⊸≡/(⊃(∩(I~Draw~Rect Blue))I~Collide~Rects∩Rect) ⧅₂<)
-  ∧Apply °⊟⤸₁
 )
 
 Render ↚ ≡◇(I~Texture~Draw°Sprite) °□₂
@@ -113,17 +100,58 @@ Regeneration ← ECS!(
   # ⍜Data ≡◇Health!(⍜⊃Current Max⊸↧ ⍜⊃Current Regen⊸+)
 )
 
-Paths ← ECS!(
-  ⊸⊃(⤚GetD◡Filter{"Path" "Position" "Velocity"}|GetD⊙"Position"⊸Filter"PlayerTag")
-  ≡°⊂°□₃
-  # ⨬( # to point
-  # | ⋅𝄐⌟-
-  # )
+Repulsion ← ECS!(
+  ρ ← 0.2 # repulsion strength
+  CPos ← +⊓÷₂◇+◇Collision!⊃Size Offset⊃⊏₀⊏₂
+  Rect ← ⊙◇+◇Collision!⊃Size Offset⊃⊏₀⊏₂
+  Apply ← (
+    ⊃(∩⊏₁|×ρ Norm◇-∩CPos|∩◇∘∩⊣)
+    SetD ⊙⊙"Velocity" ∩⊟ ◇⊓⌟-+
+  )
+
+  ⊸⤚GetD◡Filter{"Collision" "Velocity" "Position"}
+  ⊛◇⍜÷₅₀⌊ ⊃⊏₂⍉ ▽≡◇Collision~Solid⊸⊢ ⊂≡◇≡□
+  /◇⊂⊕(□▽⊸≡/(⊃(∩(I~Draw~Rect Blue))I~Collide~Rects∩Rect) ⧅₂<)
+  ∧Apply °⊟⤸₁
+)
+
+Tracking ← ECS!(
+  ξ ← 4e`2 # tracking tendency
+  ≡°⊂⊓°□₃:⊸⊃(
+    ⤚GetD◡Filter{"Path" "Position" "Velocity"}
+  | GetD⊙"Position"⊸Filter"PlayerTag"
+  )
+  + ×ξ ⨬(
+    Norm ⊓˜-∘ # To point → norm(Pos - Point)
+  | Norm⋅𝄐⌟-  # To player → norm(PlayerPos - Pos)
+    # | # To enemy → norm(GetD(i, "Position") - Pos)
+  )
+  SetD ⊙⊙"Velocity"
+)
+
+Cohesion ← ECS!(
+  χ ← 2e`3 # cohesion scale
+  ⊸⤚GetD⊙{"Position" "Velocity"}⊸Filter"EnemyTag"
+  ∩/◇⊂ ⊕(∩□ +×χ≡Norm -⟜[÷⊃⧻/+])⊛⊸⍜÷₂₀₀⌊ °□₂
+  SetD⊙⊙"Velocity"
+)
+
+Alignment ← ECS!(
+  α ← 3e`3 # alignment tendency
+  ⊸⤚GetD⊙{"Position" "Velocity"}⊸Filter"EnemyTag"
+  ∩/◇⊂ ⊕(∩□ +⌞×α Norm ÷⊸⊃⧻/+)⊛⍜÷₂₀₀⌊ °□₂
+  SetD⊙⊙"Velocity"
 )
 
 Controls ← ECS!(
-  ⊸⊓(Filter{"PlayerTag"}|"Velocity")
+  ⊸⊓(Filter"PlayerTag"|"Velocity")
   SetD ¤×₅⨬◌÷⊸≠₀⊸⍜°√/+ ⊟°ℂ /+ I~Key~WASD 0
+)
+
+# Sanity checking
+# ensures some invariants, like the maximum possible velocity etc.
+Sanity ← ECS!(
+  SetD⍜°×⊙↧₁◡GetD◡Filter"Velocity"
 )
 
 ECS!(
@@ -136,17 +164,21 @@ ECS!(
   | PlayerTag → ∞
   )
 
-  # I~Loop!(
-  #   I~Draw~Background Black
-  #   Spawning
-  #   Repulsion
-  #   Dying
-  #   Regeneration
-  #   Controls
-  #   Movement
-  #   Rendering
-  # )
+  I~Loop!(
+    I~Draw~Background Black
+    Spawning
+    Tracking
+    Cohesion
+    Alignment
+    Repulsion
+    Sanity
+    Dying
+    Regeneration
+    Controls
+    Movement
+    Rendering
+  )
 
-  Spawning
-  Paths
+  # ⍥₁₀Spawning
+  # Cohesion
 )
